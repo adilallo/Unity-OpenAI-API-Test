@@ -79,52 +79,63 @@ namespace UnityLibrary
         } // execute
 
 
-           private IEnumerator HandleRequest(byte[] postData, string jsonData)
-{
-    using (UnityWebRequest request = UnityWebRequest.Post(url, jsonData))
-    {
-        request.uploadHandler = new UploadHandlerRaw(postData);
-        request.downloadHandler = new DownloadHandlerBuffer();
-        request.SetRequestHeader("Content-Type", "application/json");
-        request.SetRequestHeader("Authorization", "Bearer " + apiKey);
-
-        yield return request.SendWebRequest();
-
-        string generatedText = string.Empty;
-
-        if (request.result == UnityWebRequest.Result.ConnectionError)
+        private IEnumerator HandleRequest(byte[] postData, string jsonData)
         {
-            Debug.LogError(request.error);
+            using (UnityWebRequest request = UnityWebRequest.Post(url, jsonData))
+            {
+                request.uploadHandler = new UploadHandlerRaw(postData);
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.SetRequestHeader("Content-Type", "application/json");
+                request.SetRequestHeader("Authorization", "Bearer " + apiKey);
+
+                yield return request.SendWebRequest();
+
+                string generatedText = string.Empty;
+
+                if (request.result == UnityWebRequest.Result.ConnectionError)
+                {
+                    Debug.LogError(request.error);
+                }
+                else
+                {
+                    // parse the results to get values 
+                    OpenAIAPI responseData = JsonUtility.FromJson<OpenAIAPI>(request.downloadHandler.text);
+
+                    // Check for errors in the API response
+                    if (responseData.model != null && responseData.model.StartsWith("Error:"))
+                    {
+                        Debug.LogError("OpenAI API Error: " + responseData.model);
+                    }
+                    else if (responseData.choices != null && responseData.choices.Length > 0)
+                    {
+                        // sometimes contains 2 empty lines at start?
+                        generatedText = responseData.choices[0].text.TrimStart('\n').TrimStart('\n');
+                    }
+                    else
+                    {
+                        Debug.LogError("Unexpected API response");
+                    }
+                }
+
+                MainThreadDispatcher.RunOnMainThread(() => {
+                    inputResults.text = generatedText;
+                    loadingIcon.SetActive(false);
+                });
+
+                // Dispose of the handlers
+                if (request.downloadHandler != null)
+                {
+                    request.downloadHandler.Dispose();
+                }
+                if (request.uploadHandler != null)
+                {
+                    request.uploadHandler.Dispose();
+                }
+
+                isRunning = false;
+            }
         }
-        else
-        {
-            // parse the results to get values 
-            OpenAIAPI responseData = JsonUtility.FromJson<OpenAIAPI>(request.downloadHandler.text);
 
-            // Check for errors in the API response
-            if (responseData.model != null && responseData.model.StartsWith("Error:"))
-            {
-                Debug.LogError("OpenAI API Error: " + responseData.model);
-            }
-            else if (responseData.choices != null && responseData.choices.Length > 0)
-            {
-                // sometimes contains 2 empty lines at start?
-                generatedText = responseData.choices[0].text.TrimStart('\n').TrimStart('\n');
-            }
-            else
-            {
-                Debug.LogError("Unexpected API response");
-            }
-        }
-
-        MainThreadDispatcher.RunOnMainThread(() => {
-            inputResults.text = generatedText;
-            loadingIcon.SetActive(false);
-        });
-
-        isRunning = false;
-    }
-}
         void LoadAPIKey()
         {
             // TODO optionally use from env.variable
